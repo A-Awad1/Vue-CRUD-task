@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Ahmed Awad Task</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <section id="app">
+      <h2>Add New Value</h2>
+      <form>
+        <label for="arabic-name">Enter Arabic Name :</label>
+        <input
+          type="text"
+          id="arabic-name"
+          dir="rtl"
+          v-model="arabicName"
+          @focus="removeErrors"
+        />
+        <label for="english-name">Enter English Name :</label>
+        <input
+          type="text"
+          id="english-name"
+          v-model="englishName"
+          @focus="removeErrors"
+        />
+        <label for="sort-number">Enter Sort Number :</label>
+        <input
+          type="number"
+          id="sort-number"
+          min="1"
+          max="100"
+          v-model="sortNumber"
+          @focus="removeErrors"
+        />
+        <div class="errors-list" v-if="addErrors">
+          <span v-for="error in errorsList">{{error}}</span>
+        </div>
+        <button
+          class="add-btn"
+          @click.prevent="method ='add';insertWithValidation(lastId,arabicName,englishName,sortNumber)"
+        >
+          Add
+        </button>
+      </form>
+      <hr />
+      <h2>Show All Data</h2>
+      <div class="filtration">
+        <label>Filter By : </label>
+        <input
+          type="text"
+          placeholder="Arabic Name"
+          v-model="filterArabicInput"
+          @focus="removeErrors"
+        />
+        <input
+          type="text"
+          placeholder="English Name"
+          v-model="filterEnglishInput"
+          @focus="removeErrors"
+        />
+        <select v-model="filterSort">
+          <option value="">All Sorts</option>
+          <option v-for="s in allSorts" :value="s">{{s}}</option>
+        </select>
+      </div>
+      <div class="errors-list" v-if="updateErrors">
+        <span v-for="error in errorsList">{{error}}</span>
+      </div>
+      <table>
+        <tr>
+          <th>Arabic Name</th>
+          <th>English Name</th>
+          <th>Sort Number</th>
+          <th>Control</th>
+        </tr>
+        <tr
+          v-for="(member,index) in filteredData"
+          v-show="index >= rowStart-1 && index <= rowEnd-1"
+        >
+          <td>
+            <input
+              type="text"
+              v-model="member.arrivingArabicName"
+              @focus="removeErrors"
+            />
+          </td>
+          <td>
+            <input
+              type="text"
+              v-model="member.arrivingEnglishName"
+              @focus="removeErrors"
+            />
+          </td>
+          <td>
+            <input
+              type="number"
+              min="1"
+              max="100"
+              v-model="member.sort"
+              @focus="removeErrors"
+            />
+          </td>
+          <td>
+            <button
+              @click.prevent="method ='update';insertWithValidation(member.id,member.arrivingArabicName,member.arrivingEnglishName,member.sort)"
+            >
+              Update
+            </button>
+            <button @click="deleteData(member.id)">Delete</button>
+          </td>
+        </tr>
+      </table>
+      <div class="pagination" v-show="filteredData.length >0">
+        <div>
+          <span>Showing</span>
+          <span v-if="filteredData.length > 10">
+            {{` from ${rowStart} to ${rowEndShow} of `}}
+          </span>
+          <span>{{filteredData.length}} Entries</span>
+          <span v-show="noFilterLength > filteredData.length">
+            [ Filtered From {{noFilterLength}} Total Entries ]
+          </span>
+        </div>
+        <div class="pagination-btns">
+          <button @click="previousPagination()" :disabled="rowStart <= 1">
+            Previous
+          </button>
+          <button
+            @click="nextPagination()"
+            :disabled="rowEnd - filteredData.length >= 0"
+          >
+            Next
+          </button>
+        </div>
+      </div>
+    </section>
+    <script src="vue.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/axios/1.3.4/axios.min.js"></script>
+    <script>
+      const token =
+        "eyJhbGciOiJodHRwOi8vd3d3LnczLm9yZy8yMDAxLzA0L3htbGRzaWctbW9yZSNobWFjLXNoYTI1NiIsInR5cCI6IkpXVCJ9.eyJodHRwOi8vc2NoZW1hcy54bWxzb2FwLm9yZy93cy8yMDA1LzA1L2lkZW50aXR5L2NsYWltcy9uYW1lIjoic3VwZXJhZG1pbiIsImh0dHA6Ly9zY2hlbWFzLnhtbHNvYXAub3JnL3dzLzIwMDUvMDUvaWRlbnRpdHkvY2xhaW1zL3NpZCI6IjAwMDdjYWY1LWFjNjktNDViNi1hOTA1LWI1NjBlNTkxOWI4OSIsImRvY3RvcklkIjoiMCIsImV4cCI6MTY3ODA5MDc5NSwiaXNzIjoiQ2xpbml2aXNvciIsImF1ZCI6IkNsaW5pdmlzb3IifQ.2KA8Aak_tBu_gg2jD0jlar9bO8zSPYd3XpaonHACVQ0";
+      const config = {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      };
+      let vm = new Vue({
+        el: "#app",
+        data: {
+          filteredData: [],
+          arabicName: "",
+          englishName: "",
+          sortNumber: "",
+          noFilterLength: "",
+          lastId: null,
+          allSorts: "",
+          filterArabicInput: "",
+          filterEnglishInput: "",
+          filterSort: "",
+          rowStart: 1,
+          rowEnd: 10,
+          errorsList: [],
+          method: "",
+        },
+        methods: {
+          getData: function () {
+            let rowsNumber = 1000; // to get all data , to can control the filtration of all data not the first 10 rows only
+            axios
+              .get(
+                `http://40.127.194.127:777/api/Emergency/GetAllArrivingMethods?first=2&page=0&rows=${rowsNumber}`,
+                config
+              )
+              .then((resolved) => {
+                let responseData = resolved.data.data;
+                /* Before filtration */
+                // - get All Data Length Before filtration
+                this.noFilterLength = responseData.length;
+                // - get lastId
+                this.lastId = Math.max(responseData.map((e) => e.id));
+                // - get all sorts and sort numerically  (to display all sorts in select box dynamically from api)
+                this.allSorts = [
+                  ...new Set(responseData.map((el) => el.sort)),
+                ].sort((a, b) => a - b);
+
+                /* filtration */
+                this.filteredData = responseData.filter(
+                  (e) =>
+                    new RegExp(this.filterArabicInput, "ig").test(
+                      e.arrivingArabicName
+                    ) &&
+                    new RegExp(this.filterEnglishInput, "ig").test(
+                      e.arrivingEnglishName
+                    ) &&
+                    (this.filterSort === e.sort || this.filterSort === "")
+                );
+              })
+              .catch((rejected) => {
+                console.log(rejected);
+              });
+          },
+          addData: function (
+            id,
+            arrivingArabicName,
+            arrivingEnglishName,
+            sort
+          ) {
+            axios
+              .post(
+                "http://40.127.194.127:777/api/Emergency/AddOrUpdateArrivingMethod",
+                {
+                  id: ++this.lastId, // to increase id by 1 from the max value automatically when add new value
+                  accountId: 1,
+                  arrivingArabicName: arrivingArabicName,
+                  arrivingEnglishName: arrivingEnglishName,
+                  sort: sort,
+                },
+                config
+              )
+              .then((resolved) => {
+                this.arabicName = "";
+                this.englishName = "";
+                this.sortNumber = "";
+                this.getData();
+              })
+              .catch((rejected) => {
+                console.log(rejected);
+              });
+          },
+          updateData: function (
+            id,
+            arrivingArabicName,
+            arrivingEnglishName,
+            sort
+          ) {
+            axios
+              .post(
+                "http://40.127.194.127:777/api/Emergency/AddOrUpdateArrivingMethod/",
+                {
+                  id: id,
+                  accountId: 1,
+                  arrivingArabicName: arrivingArabicName,
+                  arrivingEnglishName: arrivingEnglishName,
+                  sort: sort,
+                },
+                config
+              )
+              .then((resolved) => {
+                this.getData();
+              })
+              .catch((rejected) => {
+                console.log(rejected);
+              });
+          },
+          deleteData: function (id) {
+            let deleteConfirm = confirm("Are you sure to delete this entry ?");
+            if (deleteConfirm) {
+              axios
+                .post(
+                  "http://40.127.194.127:777/api/Emergency/DeleteArrivingMethod",
+                  { id },
+                  config
+                )
+                .then((resolved) => {
+                  this.getData();
+                })
+                .catch((rejected) => {
+                  console.log(rejected);
+                });
+            }
+          },
+          nextPagination: function () {
+            this.rowStart += 10;
+            this.rowEnd += 10;
+          },
+          previousPagination: function () {
+            this.rowStart -= 10;
+            this.rowEnd -= 10;
+          },
+          insertWithValidation: function (
+            id,
+            arabicName,
+            englishName,
+            sortNumber
+          ) {
+            /* validation */
+            this.errorsList = [];
+
+            // - arabic name
+            if (
+              !arabicName.trim() ||
+              !arabicName.split("").every((e) => /[\u0621-\u064A]|\s/gi.test(e)) // this regex accepting only Arabic characters or spaces
+            ) {
+              this.errorsList.push(
+                "Enter Valid Arabic Name (You must use arabic characters only) (you can separate by space)"
+              );
+            }
+
+            // - english name
+            if (
+              !englishName.trim() ||
+              !englishName.split("").every((e) => /[a-z]|\s/gi.test(e))
+            ) {
+              this.errorsList.push(
+                "Enter Valid English Name (You must use english characters only) (you can separate by space)"
+              );
+            }
+            // - sort number
+            if (!sortNumber || sortNumber === "0") {
+              this.errorsList.push("Enter Sort Number from 1 to 100");
+            }
+
+            arabicName = arabicName.trim();
+            englishName = englishName.trim();
+
+            if (!this.errorsList.length) {
+              if (this.method === "add") {
+                this.addData(id, arabicName, englishName, sortNumber);
+              }
+              if (this.method === "update") {
+                this.updateData(id, arabicName, englishName, sortNumber);
+              }
+            } else {
+              return false;
+            }
+          },
+          removeErrors: function () {
+            this.errorsList = [];
+          },
+        },
+        computed: {
+          rowEndShow: function () {
+            return this.filteredData.length > this.rowEnd
+              ? this.rowEnd
+              : this.filteredData.length;
+          },
+          addErrors: function () {
+            return this.method === "add" && this.errorsList.length;
+          },
+          updateErrors: function () {
+            return this.method === "update" && this.errorsList.length;
+          },
+        },
+        watch: {
+          filterArabicInput: function () {
+            this.getData();
+          },
+          filterEnglishInput: function () {
+            this.getData();
+          },
+          filterSort: function () {
+            this.getData();
+          },
+        },
+        mounted() {
+          this.getData();
+        },
+      });
+    </script>
+  </body>
+</html>
